@@ -3,9 +3,6 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# 사이드바 메인 탭 이름과 아이콘 설정
-st.set_page_config(page_title="코인 진입수량 계산기", page_icon="📐")
-
 # 다크모드 강제 적용
 if not os.path.exists(".streamlit"):
     os.makedirs(".streamlit")
