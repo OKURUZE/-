@@ -34,9 +34,10 @@ btc_price = get_btc_price()
 if btc_price:
     st.info(f"**현재 비트코인 가격 (OKX):** ${btc_price:,.2f}")
 else:
-    st.warning("가격을 불러오는데 실패했습니다.")
+    btc_price = 60000.0
+    st.warning("가격을 불러오는데 실패하여 임시 가격($60,000)이 적용됩니다.")
 
-# 1. 진입단가를 전부 빈칸(None)으로 초기화
+# 진입단가를 전부 빈칸(None)으로 초기화
 if "user_entry_prices" not in st.session_state:
     st.session_state.user_entry_prices = [None] * 9
 
@@ -55,22 +56,29 @@ data = []
 cum_qty = 0      
 cum_cost = 0     
 total_margin = 0 
+total_display_qty = 0
 
 for i in range(9):
     step_margin = reversed_amounts[i]
     total_margin += step_margin
     ep = st.session_state.user_entry_prices[i]
     
-    # 2. 진입단가(ep)가 입력되어 있을 때만 계산, 없으면 빈칸(None) 유지
+    # 1. 포지션 규모 계산
+    position_size_usd = step_margin * leverage
+    
+    # 2. 비트코인 갯수는 무조건 '현재 비트코인 가격'을 기준으로 고정 계산
+    btc_qty = position_size_usd / btc_price if btc_price > 0 else 0
+    total_display_qty += btc_qty
+    
+    # 3. 평단가 계산: 진입단가(ep)가 입력되어 있을 때만 계산
     if ep is not None and ep > 0:
-        position_size_usd = step_margin * leverage
-        btc_qty = position_size_usd / ep
+        # 입력한 진입단가(ep)에 고정된 코인 갯수(btc_qty)를 곱해 해당 회차의 '가상 포지션 가치'를 구함
+        virtual_cost = btc_qty * ep 
         cum_qty += btc_qty
-        cum_cost += position_size_usd
+        cum_cost += virtual_cost
         avg_price = cum_cost / cum_qty if cum_qty > 0 else None
     else:
-        btc_qty = None
-        avg_price = None
+        avg_price = None # 평단가는 비워둠
         
     data.append({
         "회차": f"{i+1}회차",
@@ -80,10 +88,10 @@ for i in range(9):
         "평단가 (USDT)": avg_price
     })
 
-# 합계 행 추가 (단가 부분은 빈칸)
+# 합계 행 추가 
 data.append({
     "회차": "합계",
-    "진입 비트코인 갯수 (BTC)": cum_qty if cum_qty > 0 else None,
+    "진입 비트코인 갯수 (BTC)": total_display_qty,
     "실사용 증거금 (USDT)": total_margin,
     "진입단가 (USDT)": None, 
     "평단가 (USDT)": None    
@@ -92,7 +100,7 @@ data.append({
 df = pd.DataFrame(data)
 
 st.write("### 📊 회차별 진입 계획 및 누적 평단가")
-st.caption("💡 **안내:** 표 안의 **'진입단가 (USDT)'** 빈칸을 클릭하여 원하는 가격을 입력하고 **[Enter]** 키를 누르세요.")
+st.caption("💡 **안내:** 표 안의 **'진입단가 (USDT)'** 빈칸에 예상 타점을 입력하고 **[Enter]** 키를 누르세요. (진입 갯수는 고정되며 평단가만 계산됩니다.)")
 
 # 인터랙티브 표(Data Editor) 출력 
 edited_df = st.data_editor(
@@ -118,6 +126,5 @@ if clean_prices != st.session_state.user_entry_prices:
 
 st.write("---")
 
-# 3. 초기화 버튼 삭제 및 새로고침 버튼만 유지
 if st.button("🧮 실시간 비트코인 현재가 새로고침", use_container_width=True):
     st.rerun()
