@@ -79,7 +79,7 @@ if submit_button:
         # ==========================================
         st.subheader("🚨 4. 구조 파괴 휩쏘(트랩) 경고")
         if "대칭" in pattern_type:
-            st.error(f"돌파 직후 출현하는 **회귀 캔들**의 몸통이 좁아진 폭의 33~50%인 **{regressive_min:.2f} ~ {regressive_max:.2f}** 사이를 기록하며 패턴 안으로 다시 파고들면 가짜 돌파로 확정 짓습니다.")
+            st.error(f"**회귀 캔들**의 몸통이 **{regressive_min:.2f} ~ {regressive_max:.2f}** 사이를 기록하며 패턴 안으로 다시 파고들면 가짜 돌파로 확정 짓습니다.")
         elif "어센딩" in pattern_type:
             st.error(f"상향 돌파 후 출현한 캔들의 **종가(Close)**가 수평 저항선인 **{high_price:.2f} 아래로 다시 파고들어 마감**되면 전형적인 불트랩(세력의 물량 넘기기)이므로 즉시 도망치세요.")
         elif "디센딩" in pattern_type:
