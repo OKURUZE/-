@@ -13,7 +13,7 @@ st.set_page_config(page_title="비트코인 물타기 및 평단가 계산기", 
 st.title("📈 비트코인 물타기 및 평단가 계산기")
 
 # 실시간 BTC 가격 가져오기 (OKX API)
-@st.cache_data(ttl=10) # 10초간 가격 캐싱하여 잦은 깜빡임 방지
+@st.cache_data(ttl=10) # 10초간 가격 캐싱
 def get_btc_price():
     try:
         url = "https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT"
@@ -42,7 +42,7 @@ for i in range(9):
     remaining -= amount
 reversed_amounts = original_amounts[::-1]
 
-# ★ 핵심: 초기 진입단가(None)를 담은 DataFrame을 Session State에 고정
+# 세션 스테이트 초기화 (최초 1회 실행)
 if "df_data" not in st.session_state:
     initial_data = []
     for i in range(9):
@@ -56,9 +56,9 @@ if "df_data" not in st.session_state:
     st.session_state.df_data = pd.DataFrame(initial_data)
 
 st.write("### 📊 회차별 진입 계획 및 누적 평단가")
-st.caption("💡 **안내:** 표 안의 **'진입단가 (USDT)'** 빈칸을 클릭하여 예상 타점을 입력하세요.")
+st.caption("💡 **안내:** 표 안의 **'진입단가 (USDT)'** 빈칸에 예상 타점을 입력하고 **[Enter]**를 치면 즉시 평단가가 계산됩니다.")
 
-# 사용자가 입력할 수 있는 표 (자동으로 st.session_state에 값이 반영됨)
+# 표 출력 (사용자 입력 받기)
 edited_df = st.data_editor(
     st.session_state.df_data,
     column_config={
@@ -69,37 +69,38 @@ edited_df = st.data_editor(
         "평단가 (USDT)": st.column_config.NumberColumn("평단가 (USDT)", format="%.2f", disabled=True),
     },
     hide_index=True,
-    use_container_width=True,
-    key="editor_key" # 이 키를 통해 값이 즉시 업데이트됨
+    use_container_width=True
 )
 
-# ★ 입력받은 진입단가를 바탕으로 평단가 실시간 재계산
+# 수정된 진입단가를 바탕으로 평단가 다시 계산
 cum_qty = 0
 cum_cost = 0
-total_margin = sum(reversed_amounts)
-total_qty = sum(edited_df["진입 비트코인 갯수 (BTC)"])
-
-# 계산용 빈 리스트
 new_avg_prices = []
 
 for index, row in edited_df.iterrows():
     ep = row["진입단가 (USDT)"]
     qty = row["진입 비트코인 갯수 (BTC)"]
     
-    # 진입단가에 유효한 숫자가 입력되었을 때만 누적 계산
     if pd.notna(ep) and ep > 0:
         virtual_cost = qty * ep
         cum_qty += qty
         cum_cost += virtual_cost
-        avg_price = cum_cost / cum_qty
-        new_avg_prices.append(avg_price)
+        new_avg_prices.append(cum_cost / cum_qty)
     else:
-        new_avg_prices.append(None) # 입력 안 했으면 평단가도 빈칸
+        new_avg_prices.append(None)
 
-# 원본 DataFrame에 계산된 평단가 업데이트
+# 계산된 평단가를 데이터프레임에 덮어쓰기
 edited_df["평단가 (USDT)"] = new_avg_prices
 
-# 합계 행(마지막 줄)만 별도로 떼어내서 화면에 보여주기 위한 처리
+# ★ 핵심 해결 로직: 진입단가에 입력(변화)이 감지되면 즉시 데이터를 저장하고 화면을 강제 새로고침
+if not edited_df["진입단가 (USDT)"].equals(st.session_state.df_data["진입단가 (USDT)"]):
+    st.session_state.df_data = edited_df
+    st.rerun()
+
+# 합계(마지막 줄) 계산 
+total_qty = edited_df["진입 비트코인 갯수 (BTC)"].sum()
+total_margin = sum(reversed_amounts)
+
 summary_df = pd.DataFrame([{
     "회차": "합계",
     "진입 비트코인 갯수 (BTC)": total_qty,
@@ -107,12 +108,6 @@ summary_df = pd.DataFrame([{
     "진입단가 (USDT)": None,
     "평단가 (USDT)": None
 }])
-
-# 수정된 본문과 합계를 합쳐서 최종 테이블 모양 완성 (화면에만 표시)
-final_display_df = pd.concat([edited_df, summary_df], ignore_index=True)
-
-# 계산된 결과값을 다시 화면에 그리기 위해 Session State 업데이트
-st.session_state.df_data = edited_df
 
 st.write("---")
 st.write("### 📌 합계 및 계산 결과")
@@ -130,6 +125,5 @@ st.dataframe(
 )
 
 if st.button("🧮 표 전체 초기화 (현재가 기준으로 갯수 재계산)", use_container_width=True):
-    # 버튼 누르면 세션 날려서 처음부터 다시 세팅
     del st.session_state.df_data
     st.rerun()
