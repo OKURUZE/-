@@ -1,8 +1,5 @@
 import streamlit as st
 
-# 사이드바 메인 탭 이름과 아이콘 설정
-st.set_page_config(page_title="통합 수렴 분석기", page_icon="📐")
-
 st.title("📐 통합 수렴 분석기")
 st.write("수렴 패턴의 1차 목표가, 진성 돌파 조건, 트랩 경고를 직관적이고 빠르게 정밀 분석합니다.")
 
