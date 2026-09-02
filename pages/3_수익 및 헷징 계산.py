@@ -19,14 +19,16 @@ with col2:
 st.divider()
 
 # 2. 실시간 데이터 표시 영역
-# run_every=2 옵션으로 인해 이 함수 내부만 2초마다 자동으로 다시 실행됨
 @st.fragment(run_every=2)
 def display_realtime_data():
     try:
-        # 바이낸스 API를 통해 비트코인 현재가 호출
-        url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
-        response = requests.get(url)
-        current_price = float(response.json()['price'])
+        # 접속 제한이 없는 바이비트(Bybit) 현물 API로 변경
+        url = "https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        
+        # 바이비트 API 구조에 맞게 가격 데이터 추출
+        current_price = float(data['result']['list'][0]['lastPrice'])
         
         # 수익금 및 수익률 계산
         profit = (current_price - entry_price) * quantity
@@ -35,7 +37,7 @@ def display_realtime_data():
         else:
             profit_rate = 0.0
             
-        # 화면에 수치 표시 (st.metric 활용)
+        # 화면에 수치 표시
         c1, c2 = st.columns(2)
         with c1:
             st.metric(label="비트코인 현재가 (USDT)", value=f"${current_price:,.2f}")
@@ -47,7 +49,8 @@ def display_realtime_data():
             )
             
     except Exception as e:
-        st.error("가격을 불러오는 중 오류가 발생했습니다. 네트워크 상태를 확인하세요.")
+        # 어떤 오류인지 화면에 직접 표시되도록 수정
+        st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
 
 # 자동 갱신되는 뷰 함수 실행
 display_realtime_data()
