@@ -103,7 +103,15 @@ def display_realtime_data():
         if net_equity <= maintenance_margin:
             st.error("💀 강제 청산 발생! (순 담보가 유지 증거금 밑으로 추락했습니다. 현물이 시장가로 강제 매각됩니다.)")
         elif net_equity <= used_margin:
-            st.warning("🚨 마진콜 위험! (순 담보가 필요 증거금 밑으로 떨어졌습니다. 레버리지를 낮추거나 테더를 입금해야 합니다.)")
+            # HTML과 CSS를 사용해 경고창의 배경색(빨간색)과 글자색(흰색)을 직접 지정
+            st.markdown(
+                """
+                <div style="background-color: #D32F2F; color: white; padding: 16px; border-radius: 8px;">
+                    <strong>🚨 마진콜 위험!</strong> (순 담보가 필요 증거금 밑으로 떨어졌습니다. 레버리지를 낮추거나 테더를 입금해야 합니다.)
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
         else:
             safety_buffer = net_equity - used_margin
             st.success(f"✅ 안전 상태입니다. (마진콜 경고선까지 약 ${safety_buffer:,.2f}의 여유 담보가 남아있습니다.)")
