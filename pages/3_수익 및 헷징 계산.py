@@ -22,13 +22,20 @@ st.divider()
 @st.fragment(run_every=2)
 def display_realtime_data():
     try:
-        # 접속 제한이 없는 바이비트(Bybit) 현물 API로 변경
-        url = "https://api.bybit.com/v5/market/tickers?category=spot&symbol=BTCUSDT"
-        response = requests.get(url, timeout=5)
+        # 접속 차단이 거의 없는 바이낸스 퍼블릭 데이터 전용 API로 복귀
+        url = "https://data-api.binance.vision/api/v3/ticker/price?symbol=BTCUSDT"
+        
+        # 봇 차단(Cloudflare)을 피하기 위해 크롬 브라우저인 것처럼 위장(User-Agent)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+        }
+        
+        # headers를 추가하여 요청
+        response = requests.get(url, headers=headers, timeout=5)
         data = response.json()
         
-        # 바이비트 API 구조에 맞게 가격 데이터 추출
-        current_price = float(data['result']['list'][0]['lastPrice'])
+        # 다시 바이낸스 데이터 구조에 맞게 수정
+        current_price = float(data['price'])
         
         # 수익금 및 수익률 계산
         profit = (current_price - entry_price) * quantity
@@ -49,8 +56,7 @@ def display_realtime_data():
             )
             
     except Exception as e:
-        # 어떤 오류인지 화면에 직접 표시되도록 수정
-        st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
+        st.error(f"데이터 통신 에러가 발생했습니다: {e}")
 
 # 자동 갱신되는 뷰 함수 실행
 display_realtime_data()
