@@ -4,7 +4,7 @@ import yfinance as yf
 st.set_page_config(page_title="실시간 환율 계산기", page_icon="💱")
 
 # 환율 데이터 가져오기 (API 호출 최적화를 위해 60초 캐싱)
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=3)
 def get_exchange_rates():
     # Yahoo Finance에서 실시간 환율 종가 가져오기
     usd_krw = yf.Ticker("USDKRW=X").history(period="1d")['Close'].iloc[-1]
