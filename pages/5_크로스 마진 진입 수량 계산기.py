@@ -30,13 +30,13 @@ current_price = get_current_price(coin_choice)
 st.sidebar.success(f"현재 {coin_choice} 가격: **${current_price:,.2f}**")
 
 # 시드 및 배수 입력
-total_equity = st.sidebar.number_input("지갑 총 시드 (USDT)", min_value=100.0, value=10000.0, step=100.0)
-display_leverage = st.sidebar.slider("거래소 화면 설정 배수 (x)", min_value=10, max_value=100, value=20, step=1)
+total_equity = st.sidebar.number_input("지갑 총 시드 (USDT)", min_value=100.0, value=40000.0, step=100.0)
+display_leverage = st.sidebar.slider("거래소 화면 설정 배수 (x)", min_value=10, max_value=100, value=100, step=1)
 
 st.sidebar.divider()
 
 # 실효 레버리지 슬라이더
-target_eff_lev = st.sidebar.slider("목표 실효 레버리지 (x) - 리스크 조절", min_value=1.0, max_value=20.0, value=2.0, step=0.5)
+target_eff_lev = st.sidebar.slider("목표 실효 레버리지 (x) - 리스크 조절", min_value=1.0, max_value=20.0, value=10.0, step=0.5)
 
 # --- 4. 백엔드 핵심 계산 로직 ---
 # 진입 금액 = 총 시드 * 실효 레버리지
