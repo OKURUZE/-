@@ -43,7 +43,7 @@ current_price = get_current_price(coin_choice)
 st.sidebar.success(f"현재 {coin_choice} 가격: **${current_price:,.2f}**")
 
 # 시드 및 배수 입력
-total_equity = st.sidebar.number_input("지갑 총 시드 (USDT)", min_value=100.0, value=25000.0, step=100.0)
+total_equity = st.sidebar.number_input("지갑 총 시드 (USDT)", min_value=100.0, value=30000.0, step=100.0)
 display_leverage = st.sidebar.slider("거래소 화면 설정 배수 (x)", min_value=10, max_value=125, value=66, step=1)
 
 st.sidebar.divider()
