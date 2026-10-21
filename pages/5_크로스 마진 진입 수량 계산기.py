@@ -3,107 +3,100 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 
-# --- 1. 실시간 가격 불러오기 함수 ---
-@st.cache_data(ttl=10) # 슬라이더 조작 시 API 과부하 방지용 10초 캐시
-def get_current_price(symbol):
-    ticker_symbol = f"{symbol}-USD"
-    try:
-        ticker = yf.Ticker(ticker_symbol)
-        current_price = ticker.fast_info['lastPrice']
-        return float(current_price)
-    except Exception as e:
-        return 80000.0 if symbol == "BTC" else 3000.0
+st.set_page_config(page_title="크로스 마진 리스크 시뮬레이터", layout="wide")
 
-# --- 2. [핵심 기능] 가격 강제 갱신 콜백 함수 ---
+@st.cache_data(ttl=15)
+def get_current_price(symbol):
+    try:
+        ticker = yf.Ticker(f"{symbol}-USD")
+        return float(ticker.fast_info['lastPrice'])
+    except Exception:
+        # 통신 오류 시 코인별 기본값 반환
+        fallback = {"BTC": 68000.0, "ETH": 2600.0, "SOL": 150.0}
+        return fallback.get(symbol, 100.0)
+
 def clear_price_cache():
-    """드롭다운 변경이나 새로고침 버튼 클릭 시 기존 저장된 가격 캐시를 날려 무조건 최신가를 불러오게 합니다."""
     get_current_price.clear()
 
-# --- 3. Streamlit UI 설정 ---
-st.set_page_config(page_title="크로스 마진 리스크 시뮬레이터", layout="wide")
 st.title("⚡ 크로스 마진 실효 레버리지 시뮬레이터")
-st.markdown("안전한 선물 트레이딩을 위한 **[진입 수량]** 및 **[청산 하락폭]** 실시간 계산기")
 
-# --- 4. 사이드바: 기본 설정 입력 ---
-st.sidebar.header("📊 기본 설정")
+# --- 사이드바 설정 ---
+st.sidebar.header("⚙️ 포지션 및 계좌 설정")
 
-# 코인 선택 (on_change 속성을 사용해 선택이 바뀌는 순간 캐시를 파기합니다)
+# 1. 타겟 코인에 SOL 추가
 coin_choice = st.sidebar.selectbox(
-    "타겟 코인 선택", 
-    ["BTC", "ETH"], 
+    "타겟 코인", 
+    ["BTC", "ETH", "SOL"], 
     on_change=clear_price_cache
 )
 
-# 수동 새로고침 버튼
-if st.sidebar.button("🔄 현재가 즉시 갱신", use_container_width=True):
+# 코인별 세부 파라미터 설정 (호가 단위 및 유지증거금률)
+coin_params = {
+    "BTC": {"step": 100.0, "mmr": 0.004, "max_lev": 125, "fmt": "%.1f"},
+    "ETH": {"step": 10.0,  "mmr": 0.005, "max_lev": 100, "fmt": "%.2f"},
+    "SOL": {"step": 0.5,   "mmr": 0.008, "max_lev": 100, "fmt": "%.2f"},
+}
+params = coin_params[coin_choice]
+
+# 실시간 가격 조회 및 수동 갱신 버튼
+live_price = get_current_price(coin_choice)
+if st.sidebar.button("🔄 실시간 시장가 갱신"):
     clear_price_cache()
+    live_price = get_current_price(coin_choice)
 
-# 실시간 가격 렌더링
-current_price = get_current_price(coin_choice)
-st.sidebar.success(f"현재 {coin_choice} 가격: **${current_price:,.2f}**")
+entry_price = st.sidebar.number_input(
+    f"{coin_choice} 진입 가격 (USDT)", 
+    value=round(live_price, 2), 
+    step=params["step"],
+    format=params["fmt"]
+)
 
-# 시드 및 배수 입력
-total_equity = st.sidebar.number_input("지갑 총 시드 (USDT)", min_value=100.0, value=30000.0, step=100.0)
-display_leverage = st.sidebar.slider("거래소 화면 설정 배수 (x)", min_value=10, max_value=125, value=66, step=1)
+total_equity = st.sidebar.number_input("총 시드 (USDT)", value=44204.0, step=100.0)
+display_leverage = st.sidebar.slider("화면 설정 배수 (Leverage)", 1, params["max_lev"], min(100, params["max_lev"]))
+target_eff_lev = st.sidebar.slider("목표 실효 레버리지 (Effective Lev)", 0.5, 25.0, 10.0, step=0.5)
+position_side = st.sidebar.radio("포지션 방향", ["Long (공매수)", "Short (공매도)"])
 
-st.sidebar.divider()
+# --- 핵심 계산 로직 ---
+position_notional = total_equity * target_eff_lev          # 포지션 총 규모 (USDT)
+coin_qty = position_notional / entry_price                 # 진입 수량 (개)
+initial_margin = position_notional / display_leverage      # 필요 개시 증거금 (USDT)
+maint_margin = position_notional * params["mmr"]           # 유지 증거금 (USDT)
 
-# 실효 레버리지 슬라이더
-target_eff_lev = st.sidebar.slider("목표 실효 레버리지 (x) - 리스크 조절", min_value=1.0, max_value=20.0, value=10.0, step=0.5)
+# 크로스 마진 가용 손실 완충금 (총 시드 - 유지 증거금)
+available_loss_buffer = total_equity - maint_margin
+price_move_to_liq = available_loss_buffer / coin_qty if coin_qty > 0 else 0
 
-# --- 5. 백엔드 핵심 계산 로직 ---
-position_notional = total_equity * target_eff_lev
-entry_qty = position_notional / current_price
+if "Long" in position_side:
+    liq_price = max(0.0, entry_price - price_move_to_liq)
+    liq_drop_pct = ((liq_price - entry_price) / entry_price) * 100
+else:
+    liq_price = entry_price + price_move_to_liq
+    liq_drop_pct = ((liq_price - entry_price) / entry_price) * 100
 
-# 한도 대비 진입 비율(%) = (목표 실효 레버리지 / 설정 배수) * 100
-entry_ratio_pct = (target_eff_lev / display_leverage) * 100
-entry_ratio_pct = min(entry_ratio_pct, 100.0)
+# --- 메인 대시보드 출력 ---
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("실시간/진입 단가", f"${entry_price:,.2f}")
+col2.metric(f"진입 수량 ({coin_choice})", f"{coin_qty:,.2f} {coin_choice}")
+col3.metric("포지션 총 가치", f"${position_notional:,.0f}")
+col4.metric("예상 강제청산가", f"${liq_price:,.2f}", f"{liq_drop_pct:.2f}%", delta_color="inverse")
 
-gap_ratio_pct = 100.0 - entry_ratio_pct
-liquidation_drop_pct = -(100 / target_eff_lev)
+# --- 청산 방어선 시각화 (Plotly) ---
+fig = go.Figure()
 
-liquidation_price = current_price * (1 + (liquidation_drop_pct / 100))
-liquidation_price = max(0, liquidation_price)
-
-# --- 6. 메인 화면 출력 ---
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric(label=f"권장 진입 수량 ({coin_choice})", value=f"{entry_qty:,.4f} 개")
-with col2:
-    st.metric(label="총 진입 금액 (USDT)", value=f"${position_notional:,.0f}")
-with col3:
-    risk_color = "🔴 초고위험 (데스존)" if target_eff_lev >= 10 else "🟡 주의 요망" if target_eff_lev >= 5 else "🟢 안전"
-    st.metric(label=f"예상 청산 하락폭 ({risk_color})", value=f"{liquidation_drop_pct:,.1f} %", delta=f"청산가: ${liquidation_price:,.0f}", delta_color="inverse")
-
-st.divider()
-
-col_chart1, col_chart2 = st.columns(2)
-
-with col_chart1:
-    st.subheader("📉 청산가 방어선 시각화")
-    fig_price = go.Figure()
-    fig_price.add_trace(go.Bar(x=["가격 레벨"], y=[current_price - liquidation_price], base=liquidation_price, marker_color='lightgreen', name="안전 구간 (방어막)"))
-    fig_price.add_trace(go.Scatter(x=["가격 레벨"], y=[current_price], mode="markers+text", marker=dict(color='blue', size=15), text=[f"현재가: ${current_price:,.0f}"], textposition="top right", name="현재가"))
-    fig_price.add_trace(go.Scatter(x=["가격 레벨"], y=[liquidation_price], mode="markers+text", marker=dict(color='red', size=15), text=[f"청산가: ${liquidation_price:,.0f}"], textposition="bottom right", name="청산가"))
-    
-    fig_price.update_layout(yaxis_title="가격 (USD)", showlegend=False, height=350, yaxis_range=[liquidation_price * 0.8, current_price * 1.1])
-    st.plotly_chart(fig_price, use_container_width=True)
-
-with col_chart2:
-    st.subheader(f"🛡️ {display_leverage}배 설정 한도 대비 수량 비율")
-    fig_bar = go.Figure()
-    bar_color = 'royalblue' if entry_ratio_pct < 100 else 'red'
-    
-    fig_bar.add_trace(go.Bar(y=["비율"], x=[entry_ratio_pct], name="진입 수량 비중", orientation='h', marker_color=bar_color, text=f"{entry_ratio_pct:.1f}%", textposition='inside'))
-    if gap_ratio_pct > 0:
-        fig_bar.add_trace(go.Bar(y=["비율"], x=[gap_ratio_pct], name="방어막 (갭) 비중", orientation='h', marker_color='lightgray', text=f"{gap_ratio_pct:.1f}%", textposition='inside'))
-    
-    fig_bar.update_layout(barmode='stack', xaxis_title="퍼센트 (%)", xaxis_range=[0, 100], showlegend=True, height=250)
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-    if entry_ratio_pct >= 100:
-        st.error("🚨 **위험:** 목표 실효 레버리지가 화면 설정 배수를 초과했습니다. 청산 방어막(갭)이 전혀 없는 상태입니다.")
-    else:
-        st.info(f"💡 **실전 주문 가이드:** 거래소 주문창에서 수량 슬라이더를 **{entry_ratio_pct:.1f}%** 까지만 당기시면 방어막이 유지됩니다.")
-
-st.caption("※ 본 시뮬레이터는 거래소 수수료 및 유지증거금률(MMR)을 제외한 수리적 모델링이며, 롱 포지션을 기준으로 계산되었습니다. 데이터 제공: Yahoo Finance")
+fig.add_trace(go.Indicator(
+    mode="number+gauge+delta",
+    value=entry_price,
+    delta={'reference': liq_price, 'position': "top"},
+    title={'text': f"<b>{coin_choice} 현재 진입가 vs 강제청산 방어선</b>"},
+    gauge={
+        'axis': {'range': [min(liq_price * 0.8, entry_price * 0.8), max(liq_price * 1.2, entry_price * 1.2)]},
+        'bar': {'color': "#00cc96" if "Long" in position_side else "#ef553b"},
+        'threshold': {
+            'line': {'color': "red", 'width': 4},
+            'thickness': 0.85,
+            'value': liq_price
+        }
+    }
+))
+fig.update_layout(height=320)
+st.plotly_chart(fig, use_container_width=True)
