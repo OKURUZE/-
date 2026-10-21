@@ -51,8 +51,8 @@ entry_price = st.sidebar.number_input(
     format=params["fmt"]
 )
 
-total_equity = st.sidebar.number_input("총 시드 (USDT)", value=44204.0, step=100.0)
-display_leverage = st.sidebar.slider("화면 설정 배수 (Leverage)", 1, params["max_lev"], min(100, params["max_lev"]))
+total_equity = st.sidebar.number_input("총 시드 (USDT)", value=11000.0, step=100.0)
+display_leverage = st.sidebar.slider("화면 설정 배수 (Leverage)", 1, params["max_lev"], min(66, params["max_lev"]))
 target_eff_lev = st.sidebar.slider("목표 실효 레버리지 (Effective Lev)", 0.5, 25.0, 10.0, step=0.5)
 position_side = st.sidebar.radio("포지션 방향", ["Long (공매수)", "Short (공매도)"])
 
